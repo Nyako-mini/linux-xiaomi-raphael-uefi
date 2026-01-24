@@ -1,0 +1,10 @@
+--- linux/scripts/package/builddeb	2026-01-24 14:17:21.463845565 +0800
++++ linux/scripts/package/builddeb	2026-01-24 14:19:04.591340190 +0800
+@@ -50,6 +50,7 @@
+ 		mkdir -p "${pdir}/boot"
+ 		cp System.map "${pdir}/boot/System.map-${KERNELRELEASE}"
+ 		cp ${KCONFIG_CONFIG} "${pdir}/boot/config-${KERNELRELEASE}"
++		cp "${pdir}/usr/lib/linux-image-${KERNELRELEASE}/qcom/sm8150-xiaomi-raphael.dtb" "${pdir}/boot/dtb-${KERNELRELEASE}"
+ 	fi
+ 
+ 	# Not all arches have the same installed path in debian
