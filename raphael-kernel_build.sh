@@ -4,8 +4,8 @@ cd linux
 git add .
 git commit -m "builddeb: Add Xiaomi Raphael DTBs to boot partition"
 wget -O arch/arm64/configs/raphael.config https://raw.githubusercontent.com/GengWei1997/kernel-deb/refs/heads/main/uefi-raphael.config
-make -j$(nproc) ARCH=arm64 LLVM=1 defconfig raphael.config
-make -j$(nproc) ARCH=arm64 LLVM=1 deb-pkg
+make -j$(nproc) ARCH=arm64 LLVM=-21 defconfig raphael.config
+make -j$(nproc) ARCH=arm64 LLVM=-21 deb-pkg
 cd ..
 
 IMAGE_DEB=$(ls -1 linux-image-*.deb 2>/dev/null | grep -v '\-dbg_' | head -n1)
