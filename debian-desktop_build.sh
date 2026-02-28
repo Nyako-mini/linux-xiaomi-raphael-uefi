@@ -49,14 +49,14 @@ chroot rootdir apt update
 chroot rootdir apt upgrade -y
 
 # 安装基础软件包
-chroot rootdir apt install -y bash-completion sudo apt-utils ssh openssh-server nano systemd-boot initramfs-tools chrony curl wget dnsmasq iptables iproute2 $1
+chroot rootdir apt install -y bash-completion sudo apt-utils ssh openssh-server nano systemd-boot initramfs-tools chrony curl wget dnsmasq iptables iproute2
 
 # 安装设备特定软件包
 chroot rootdir apt install -y rmtfs protection-domain-mapper tqftpserv
 
 # 安装语言包和设置默认语言为简体中文
 chroot rootdir apt install -y locales locales-all tzdata
-	
+
 chroot rootdir sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
 chroot rootdir locale-gen zh_CN.UTF-8
 chroot rootdir update-locale LANG=zh_CN.UTF-8 LANGUAGE=zh_CN:zh
@@ -75,8 +75,219 @@ chroot rootdir dpkg -i /tmp/firmware-xiaomi-raphael.deb
 chroot rootdir dpkg -i /tmp/alsa-xiaomi-raphael.deb
 rm rootdir/tmp/*-xiaomi-raphael.deb
 
-# 启用 Phosh 服务
-chroot rootdir systemctl enable phosh
+# ============ 桌面环境安装 ============
+DESKTOP_ENV="$1"
+echo "安装桌面环境: $DESKTOP_ENV"
+
+# 首先安装 Xorg 和基础图形支持
+chroot rootdir apt install -y \
+    xorg \
+    xserver-xorg-core \
+    xserver-xorg-input-all \
+    xserver-xorg-video-all \
+    mesa-utils \
+    mesa-utils-extra \
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    mesa-vulkan-drivers \
+    pulseaudio \
+    pulseaudio-module-bluetooth \
+    pulseaudio-utils \
+    alsa-utils \
+    bluez \
+    bluez-tools \
+    blueman \
+    network-manager-gnome \
+    network-manager-openvpn \
+    network-manager-openvpn-gnome \
+    network-manager-pptp \
+    network-manager-pptp-gnome \
+    network-manager-vpnc \
+    network-manager-vpnc-gnome
+
+case "$DESKTOP_ENV" in
+    "phosh-core")
+        echo "安装 Phosh Core 桌面环境..."
+        # Debian 可能需要添加 backports 仓库来获取较新的 Phosh
+        chroot rootdir apt install -y -t trixie-backports \
+            phosh \
+            phosh-core \
+            squeekboard \
+            phoc \
+            feedbackd
+        # 启用 Phosh
+        chroot rootdir systemctl enable phosh
+        ;;
+    "phosh-full")
+        echo "安装 Phosh Full 桌面环境..."
+        chroot rootdir apt install -y -t trixie-backports \
+            phosh \
+            phosh-core \
+            phosh-full \
+            squeekboard \
+            phoc \
+            feedbackd \
+            chatty \
+            calls \
+            gnome-contacts \
+            gnome-clock \
+            gnome-maps \
+            gnome-weather \
+            epiphany-browser
+        chroot rootdir systemctl enable phosh
+        ;;
+    "phosh-phone")
+        echo "安装 Phosh Phone 桌面环境..."
+        chroot rootdir apt install -y -t trixie-backports \
+            phosh \
+            phosh-core \
+            phosh-phone \
+            squeekboard \
+            phoc \
+            feedbackd \
+            calls \
+            chatty \
+            gnome-contacts \
+            gnome-clock \
+            gnome-maps \
+            gnome-weather
+        chroot rootdir systemctl enable phosh
+        ;;
+    "kde-plasma")
+        echo "安装 KDE Plasma 桌面环境..."
+        chroot rootdir apt install -y --no-install-recommends \
+            kde-plasma-desktop \
+            plasma-discover \
+            dolphin \
+            konsole \
+            kate \
+            systemsettings \
+            sddm \
+            plasma-nm \
+            plasma-pa \
+            kscreen \
+            kinfocenter \
+            kde-config-sddm
+        chroot rootdir systemctl enable sddm
+        ;;
+    "kde-full")
+        echo "安装 KDE Full 桌面环境..."
+        chroot rootdir apt install -y \
+            kde-full \
+            kde-standard \
+            plasma-discover \
+            plasma-discover-backend-flatpak \
+            kio-gdrive \
+            kdepim \
+            khelpcenter \
+            skanlite \
+            gwenview \
+            okular \
+            kamoso \
+            k3b \
+            kmail \
+            kontact \
+            korganizer \
+            kaddressbook \
+            konversation \
+            ktorrent \
+            sddm \
+            plasma-nm \
+            plasma-pa \
+            kscreen \
+            print-manager \
+            kde-connect \
+            kcalc \
+            kwrite \
+            kate \
+            dolphin \
+            konsole \
+            kde-config-sddm
+        chroot rootdir systemctl enable sddm
+        ;;
+    "kde-minimal")
+        echo "安装 KDE Minimal 桌面环境..."
+        chroot rootdir apt install -y --no-install-recommends \
+            plasma-desktop \
+            plasma-workspace \
+            konsole \
+            dolphin \
+            kate \
+            systemsettings \
+            sddm \
+            plasma-nm \
+            plasma-pa \
+            kscreen \
+            kde-config-sddm
+        chroot rootdir systemctl enable sddm
+        ;;
+    "gnome-core")
+        echo "安装 GNOME Core 桌面环境..."
+        chroot rootdir apt install -y --no-install-recommends \
+            gnome-core \
+            gnome-initial-setup \
+            gdm3 \
+            gnome-terminal \
+            nautilus \
+            gnome-control-center \
+            gnome-tweaks \
+            gnome-software \
+            gnome-shell-extensions \
+            gnome-shell-extension-prefs
+        chroot rootdir systemctl enable gdm3
+        ;;
+    "gnome-full")
+        echo "安装 GNOME Full 桌面环境..."
+        chroot rootdir apt install -y \
+            gnome \
+            gnome-full \
+            gnome-initial-setup \
+            gnome-tweaks \
+            gnome-shell-extensions \
+            gnome-software \
+            gnome-software-plugin-flatpak \
+            firefox-esr \
+            libreoffice \
+            libreoffice-gnome \
+            transmission-gtk \
+            rhythmbox \
+            shotwell \
+            seahorse \
+            gnome-calendar \
+            gnome-clocks \
+            gnome-maps \
+            gnome-weather \
+            gnome-contacts \
+            evince \
+            file-roller \
+            baobab \
+            cheese \
+            totem \
+            gedit \
+            gdm3
+        chroot rootdir systemctl enable gdm3
+        ;;
+    "gnome-minimal")
+        echo "安装 GNOME Minimal 桌面环境..."
+        chroot rootdir apt install -y --no-install-recommends \
+            gnome-session \
+            gnome-shell \
+            gdm3 \
+            gnome-terminal \
+            nautilus \
+            gnome-control-center \
+            gnome-tweaks \
+            gnome-software \
+            gnome-shell-extension-prefs
+        chroot rootdir systemctl enable gdm3
+        ;;
+    *)
+        echo "错误: 未知的桌面环境: $DESKTOP_ENV"
+        exit 1
+        ;;
+esac
+
+# ============ 结束桌面环境安装 ============
 
 # 配置 NCM
 cat > rootdir/etc/dnsmasq.d/usb-ncm.conf << 'EOF'
@@ -136,24 +347,24 @@ WantedBy=multi-user.target
 EOF
 chroot rootdir systemctl enable usb-ncm
 
-#EFI
+# EFI
 chroot rootdir apt install -y grub-efi-arm64
 
 sed --in-place 's/^#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' rootdir/etc/default/grub
 sed --in-place 's/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/GRUB_CMDLINE_LINUX_DEFAULT=""/' rootdir/etc/default/grub
 
-#this done on device for now
-#grub-install
-#grub-mkconfig -o /boot/grub/grub.cfg
+# this done on device for now
+# grub-install
+# grub-mkconfig -o /boot/grub/grub.cfg
 
-mkdir rootdir/boot/efi
-#create fstab!
+mkdir -p rootdir/boot/efi
+# create fstab!
 echo "PARTLABEL=linux / ext4 errors=remount-ro,x-systemd.growfs 0 1
 PARTLABEL=esp /boot/efi vfat umask=0077 0 1" | tee rootdir/etc/fstab
 
 # 创建默认用户
 echo "root:1234" | chroot rootdir chpasswd
-chroot rootdir useradd -m -G sudo -s /bin/bash user
+chroot rootdir useradd -m -G sudo -s /bin/bash user || echo "用户已存在"
 echo "user:1234" | chroot rootdir chpasswd
 
 # 允许SSH root登录
@@ -165,6 +376,9 @@ chroot rootdir apt clean
 
 # 删除 wifi 证书
 rm -f rootdir/lib/firmware/reg*
+
+# 设置默认启动目标为图形界面
+chroot rootdir systemctl set-default graphical.target
 
 # 卸载所有挂载点
 umount rootdir/sys
