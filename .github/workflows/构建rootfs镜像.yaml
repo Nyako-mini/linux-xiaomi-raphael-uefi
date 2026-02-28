@@ -29,6 +29,12 @@ on:
           - phosh-core
           - phosh-full
           - phosh-phone
+          - kde-plasma     # KDE Plasma 桌面
+          - kde-full       # KDE Plasma 完整版
+          - kde-minimal    # KDE Plasma 最小化版
+          - gnome-core     # GNOME 核心版
+          - gnome-full     # GNOME 完整版
+          - gnome-minimal  # GNOME 最小化版
 
 # 工作流配置
 jobs:
@@ -57,7 +63,7 @@ jobs:
       - name: 安装构建工具
         run: |
           sudo apt update
-          sudo apt install -y debootstrap
+          sudo apt install -y debootstrap p7zip-full
       
       # 验证参数
       - name: 验证构建参数
@@ -71,6 +77,15 @@ jobs:
           if [[ "${{ env.SYSTEM_TYPE }}" == *"desktop"* && -z "${{ inputs.desktop_environment }}" ]]; then
             echo "错误: Desktop版本必须指定桌面环境参数"
             exit 1
+          fi
+          
+          # 验证桌面环境选项的有效性
+          if [[ "${{ env.SYSTEM_TYPE }}" == *"desktop"* ]]; then
+            DESKTOP_TYPE="${{ env.DESKTOP_ENV }}"
+            if [[ ! "$DESKTOP_TYPE" =~ ^(phosh-core|phosh-full|phosh-phone|kde-plasma|kde-full|kde-minimal|gnome-core|gnome-full|gnome-minimal)$ ]]; then
+              echo "错误: 无效的桌面环境选项: $DESKTOP_TYPE"
+              exit 1
+            fi
           fi
       
       # 从 GitHub Release 下载内核包
@@ -102,6 +117,18 @@ jobs:
               "https://github.com/${{ github.repository }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/alsa-xiaomi-raphael.deb" || echo "下载 alsa-xiaomi-raphael.deb 失败，可能 Release 不存在"
           fi
           
+          # 下载额外的桌面环境依赖包
+          DESKTOP_TYPE="${{ env.DESKTOP_ENV }}"
+          if [[ "$DESKTOP_TYPE" == *"kde"* ]]; then
+            curl -L -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/kde-support-xiaomi-raphael.deb \
+              "https://github.com/${{ github.repository }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/kde-support-xiaomi-raphael.deb" || echo "下载 kde-support-xiaomi-raphael.deb 失败"
+          fi
+          
+          if [[ "$DESKTOP_TYPE" == *"gnome"* ]]; then
+            curl -L -o xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/gnome-support-xiaomi-raphael.deb \
+              "https://github.com/${{ github.repository }}/releases/download/kernel-v${{ env.KERNEL_VERSION }}/gnome-support-xiaomi-raphael.deb" || echo "下载 gnome-support-xiaomi-raphael.deb 失败"
+          fi
+          
           # 检查是否下载成功
           echo "下载的内核包列表:"
           ls -la xiaomi-raphael-debs_${{ env.KERNEL_VERSION }}/ || echo "目录为空"
@@ -122,6 +149,7 @@ jobs:
         id: build-image
         run: |
           echo "开始构建 ${{ env.SYSTEM_TYPE }} 镜像..."
+          echo "桌面环境: ${{ env.DESKTOP_ENV }}"
           
           # 根据系统类型执行对应的构建脚本
           case "${{ env.SYSTEM_TYPE }}" in
@@ -154,6 +182,13 @@ jobs:
             echo "警告: rootfs.img 文件不存在"
             echo "rootfs_uuid=未知" >> $GITHUB_OUTPUT
           fi
+          
+          # 压缩rootfs.img为7z格式
+          if [ -f "rootfs.img" ]; then
+            echo "正在压缩rootfs.img为7z格式..."
+            7z a -mx=9 rootfs.7z rootfs.img
+            echo "压缩完成: $(ls -lh rootfs.7z)"
+          fi
       
       # 获取构建信息
       - name: 获取构建信息
@@ -184,6 +219,42 @@ jobs:
             SYSTEM_CATEGORY="Server"
           fi
           echo "system_category=$SYSTEM_CATEGORY" >> $GITHUB_OUTPUT
+          
+          # 获取桌面环境友好名称
+          DESKTOP_TYPE="${{ env.DESKTOP_ENV }}"
+          case "$DESKTOP_TYPE" in
+            "phosh-core")
+              DESKTOP_FRIENDLY="Phosh Core"
+              ;;
+            "phosh-full")
+              DESKTOP_FRIENDLY="Phosh Full"
+              ;;
+            "phosh-phone")
+              DESKTOP_FRIENDLY="Phosh Phone"
+              ;;
+            "kde-plasma")
+              DESKTOP_FRIENDLY="KDE Plasma"
+              ;;
+            "kde-full")
+              DESKTOP_FRIENDLY="KDE Full"
+              ;;
+            "kde-minimal")
+              DESKTOP_FRIENDLY="KDE Minimal"
+              ;;
+            "gnome-core")
+              DESKTOP_FRIENDLY="GNOME Core"
+              ;;
+            "gnome-full")
+              DESKTOP_FRIENDLY="GNOME Full"
+              ;;
+            "gnome-minimal")
+              DESKTOP_FRIENDLY="GNOME Minimal"
+              ;;
+            *)
+              DESKTOP_FRIENDLY="$DESKTOP_TYPE"
+              ;;
+          esac
+          echo "desktop_friendly=$DESKTOP_FRIENDLY" >> $GITHUB_OUTPUT
       
       # 生成Release标签和名称
       - name: 生成Release信息
@@ -199,7 +270,7 @@ jobs:
           # 生成Release名称
           RELEASE_NAME="${{ steps.build-info.outputs.os_name }} ${{ steps.build-info.outputs.system_category }} 镜像 v${{ env.KERNEL_VERSION }}"
           if [[ "${{ env.SYSTEM_TYPE }}" == *"desktop"* ]]; then
-            RELEASE_NAME="${RELEASE_NAME} (${{ env.DESKTOP_ENV }})"
+            RELEASE_NAME="${RELEASE_NAME} (${{ steps.build-info.outputs.desktop_friendly }})"
           fi
           echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
       
@@ -208,13 +279,14 @@ jobs:
         id: release-desc
         run: |
           # 构建描述内容
-          DESCRIPTION="小米 Raphael 设备 ${{ steps.build-info.outputs.os_name }} ${{ steps.build-info.outputs.system_category }} 镜像\n"
+          DESCRIPTION="## 小米 Raphael 设备 ${{ steps.build-info.outputs.os_name }} ${{ steps.build-info.outputs.system_category }} 镜像\n\n"
+          DESCRIPTION="${DESCRIPTION}### 系统信息\n"
           DESCRIPTION="${DESCRIPTION}- 系统版本: ${{ steps.build-info.outputs.os_name }} ${{ steps.build-info.outputs.os_version }}\n"
           DESCRIPTION="${DESCRIPTION}- 内核版本: ${{ steps.download-kernel.outputs.kernel_pkg_version }}\n"
           DESCRIPTION="${DESCRIPTION}- 系统镜像UUID: ${{ steps.build-image.outputs.rootfs_uuid }}\n"
           
           if [[ "${{ env.SYSTEM_TYPE }}" == *"desktop"* ]]; then
-            DESCRIPTION="${DESCRIPTION}- 桌面环境: ${{ env.DESKTOP_ENV }}\n"
+            DESCRIPTION="${DESCRIPTION}- 桌面环境: ${{ steps.build-info.outputs.desktop_friendly }}\n"
           fi
           
           DESCRIPTION="${DESCRIPTION}- 构建时间: ${{ steps.build-info.outputs.timestamp }}\n"
@@ -222,20 +294,40 @@ jobs:
           
           # 添加特定说明
           if [[ "${{ env.SYSTEM_TYPE }}" == *"server"* ]]; then
-            DESCRIPTION="${DESCRIPTION}说明：\n"
-            DESCRIPTION="${DESCRIPTION}- 这是一个无图形界面的服务器版本\n"
-            DESCRIPTION="${DESCRIPTION}- 包含基础网络管理工具\n"
-            DESCRIPTION="${DESCRIPTION}- 已安装 SSH 服务器\n"
-            DESCRIPTION="${DESCRIPTION}- 已安装中文语言支持\n"
-            DESCRIPTION="${DESCRIPTION}- 包含必要的设备驱动和固件\n"
+            DESCRIPTION="${DESCRIPTION}### 特性说明\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 这是一个无图形界面的服务器版本\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 包含基础网络管理工具\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 已安装 SSH 服务器\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 已安装中文语言支持\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 包含必要的设备驱动和固件\n"
           else
-            DESCRIPTION="${DESCRIPTION}说明：\n"
-            DESCRIPTION="${DESCRIPTION}- 这是一个带有图形界面的桌面版本\n"
-            DESCRIPTION="${DESCRIPTION}- 包含 ${{ env.DESKTOP_ENV }} 桌面环境\n"
-            DESCRIPTION="${DESCRIPTION}- 已安装 SSH 服务器\n"
-            DESCRIPTION="${DESCRIPTION}- 已安装中文语言支持\n"
-            DESCRIPTION="${DESCRIPTION}- 包含必要的设备驱动和固件\n"
+            DESCRIPTION="${DESCRIPTION}### 特性说明\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 这是一个带有图形界面的桌面版本\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 包含 ${{ steps.build-info.outputs.desktop_friendly }} 桌面环境\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 已安装 SSH 服务器\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 已安装中文语言支持\n"
+            DESCRIPTION="${DESCRIPTION}- ✅ 包含必要的设备驱动和固件\n"
+            
+            # 根据桌面环境添加特定说明
+            DESKTOP_TYPE="${{ env.DESKTOP_ENV }}"
+            if [[ "$DESKTOP_TYPE" == *"kde"* ]]; then
+              DESCRIPTION="${DESCRIPTION}- ✅ 针对 KDE Plasma 进行了优化配置\n"
+              DESCRIPTION="${DESCRIPTION}- ✅ 包含 KDE 应用套件\n"
+            elif [[ "$DESKTOP_TYPE" == *"gnome"* ]]; then
+              DESCRIPTION="${DESCRIPTION}- ✅ 针对 GNOME 进行了优化配置\n"
+              DESCRIPTION="${DESCRIPTION}- ✅ 包含 GNOME 应用套件\n"
+            elif [[ "$DESKTOP_TYPE" == *"phosh"* ]]; then
+              DESCRIPTION="${DESCRIPTION}- ✅ 针对手机使用进行了优化\n"
+              DESCRIPTION="${DESCRIPTION}- ✅ 包含 Phosh 手机界面组件\n"
+            fi
           fi
+          
+          DESCRIPTION="${DESCRIPTION}\n### 安装说明\n"
+          DESCRIPTION="${DESCRIPTION}1. 下载 rootfs.7z 文件\n"
+          DESCRIPTION="${DESCRIPTION}2. 解压得到 rootfs.img: \`7z x rootfs.7z\`\n"
+          DESCRIPTION="${DESCRIPTION}3. 将 rootfs.img 写入到设备分区\n"
+          DESCRIPTION="${DESCRIPTION}4. 确保设备树文件正确放置\n"
+          DESCRIPTION="${DESCRIPTION}5. 首次启动建议进入恢复模式进行初始配置\n"
           
           echo "description<<EOF" >> $GITHUB_OUTPUT
           echo -e "$DESCRIPTION" >> $GITHUB_OUTPUT
@@ -259,9 +351,10 @@ jobs:
       - name: 上传镜像作为工作流制品
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.SYSTEM_TYPE }}-image-v${{ env.KERNEL_VERSION }}
+          name: ${{ env.SYSTEM_TYPE }}-${{ env.DESKTOP_ENV }}-image-v${{ env.KERNEL_VERSION }}
           path: |
             rootfs.7z
+          retention-days: 30
       
       # 清理临时文件
       - name: 清理临时文件
